@@ -51,6 +51,13 @@ pub const Message = union(enum) {
     /// command are given in the `ChildExited` struct.
     child_exited: ChildExited,
 
+    /// The child process running in the surface has been spawned and its PID
+    /// is now known. Sent once from the IO thread after a successful spawn so
+    /// apprt embedders can expose the PID (e.g. for listening-port discovery).
+    /// The surface mailbox is drained on the apprt main thread, so this is the
+    /// race-free hand-off of the IO-thread-owned pid.
+    pid_available: i64,
+
     /// Show a desktop notification.
     desktop_notification: struct {
         /// Desktop notification title.

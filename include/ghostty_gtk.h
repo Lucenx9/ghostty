@@ -51,6 +51,19 @@ void ghostty_gtk_text_free(ghostty_gtk_text_t *text);
 // is still running or the surface is invalid.
 int ghostty_gtk_surface_exit_code(GtkWidget *surface, uint32_t *out_code);
 
+// Writes the surface's child process PID to *out_pid and returns 1 once the
+// child has been spawned; returns 0 (leaving *out_pid untouched) if the surface
+// is invalid/not yet initialized or the child has not been spawned yet. The PID
+// is cached on the GTK main thread, so this is safe to call from there.
+int ghostty_gtk_surface_child_pid(GtkWidget *surface, int64_t *out_pid);
+
+// Performs a Ghostty keybinding action on the surface by name, using the same
+// grammar as Ghostty's `keybind` config values (e.g. "copy_to_clipboard",
+// "paste_from_clipboard", "select_all", "start_search"). Returns 1 if the
+// action was performed, 0 if the surface is invalid/not yet initialized, the
+// action name is unknown, or the action reported no effect.
+int ghostty_gtk_surface_perform_action(GtkWidget *surface, const char *action);
+
 void ghostty_gtk_surface_free(GtkWidget *surface);
 
 #ifdef __cplusplus

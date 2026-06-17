@@ -11,6 +11,7 @@ const gobject = @import("gobject");
 const gtk = @import("gtk");
 
 const main = @import("main_ghostty.zig");
+const input = @import("input.zig");
 const state = &@import("global.zig").state;
 const CoreApp = @import("App.zig");
 const GtkApp = @import("apprt/gtk/App.zig");
@@ -205,6 +206,48 @@ pub export fn ghostty_gtk_surface_exit_code(
     const code = surface.childExitCode() orelse return 0;
     out.* = code;
     return 1;
+}
+
+/// Write the PID of the surface's child process into `out_pid`. Returns 1 if
+/// the PID is available, 0 if the surface is invalid/not yet initialized or the
+/// child has not been spawned yet. The PID is cached on the core surface from a
+/// mailbox message drained on the GTK main thread, so this is safe to call from
+/// the host's GTK main thread.
+pub export fn ghostty_gtk_surface_child_pid(
+    surface_: ?*gtk.Widget,
+    out_pid: ?*i64,
+) c_int {
+    const out = out_pid orelse return 0;
+    const surface_widget = surface_ orelse return 0;
+    const surface = gobject.ext.cast(Surface, surface_widget) orelse return 0;
+    const core_surface = surface.core() orelse return 0;
+    const pid = core_surface.child_pid orelse return 0;
+    out.* = pid;
+    return 1;
+}
+
+/// Perform a Ghostty keybinding action on the surface by name. The action is
+/// parsed with the same grammar as Ghostty's `keybind` config values (e.g.
+/// "copy_to_clipboard", "paste_from_clipboard", "select_all", "start_search").
+/// Returns 1 if the action was performed, 0 if the surface is invalid/not yet
+/// initialized, the action name is unknown, or the action reported no effect.
+pub export fn ghostty_gtk_surface_perform_action(
+    surface_: ?*gtk.Widget,
+    action_: ?[*:0]const u8,
+) c_int {
+    const surface_widget = surface_ orelse return 0;
+    const action_ptr = action_ orelse return 0;
+    const surface = gobject.ext.cast(Surface, surface_widget) orelse return 0;
+    const core_surface = surface.core() orelse return 0;
+    const action = input.Binding.Action.parse(std.mem.span(action_ptr)) catch |err| {
+        std.log.warn("unknown Ghostty GTK action: {}", .{err});
+        return 0;
+    };
+    const performed = core_surface.performBindingAction(action) catch |err| {
+        std.log.warn("failed to perform Ghostty GTK action: {}", .{err});
+        return 0;
+    };
+    return @intFromBool(performed);
 }
 
 pub export fn ghostty_gtk_surface_free(surface_: ?*gtk.Widget) void {

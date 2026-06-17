@@ -149,6 +149,12 @@ config_conditional_state: configpkg.ConditionalState,
 /// This is used to determine if we need to confirm, hold open, etc.
 child_exited: bool = false,
 
+/// The PID of the child process, set once the IO thread notifies us that the
+/// subprocess has been spawned (via the `pid_available` mailbox message). This
+/// is written and read on the apprt main thread, so apprt embedders can read
+/// it without synchronization. Null until the child has been spawned.
+child_pid: ?i64 = null,
+
 /// We maintain our focus state and assume we're focused by default.
 /// If we're not initially focused then apprts can call focusCallback
 /// to let us know.
@@ -1084,6 +1090,8 @@ pub fn handleMessage(self: *Surface, msg: Message) !void {
         .close => self.close(),
 
         .child_exited => |v| self.childExited(v),
+
+        .pid_available => |pid| self.child_pid = pid,
 
         .desktop_notification => |notification| {
             if (!self.config.desktop_notifications) {

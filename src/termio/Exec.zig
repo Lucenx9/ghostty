@@ -116,6 +116,19 @@ pub fn threadEnter(
     } else return error.ProcessNotStarted;
     errdefer if (process) |*p| p.deinit();
 
+    // Notify the surface of the child PID now that the subprocess has been
+    // spawned. The surface mailbox is drained on the apprt main thread, so
+    // this is the race-free hand-off of the IO-thread-owned pid; apprt
+    // embedders use it for listening-port discovery.
+    if (self.subprocess.process) |proc| switch (proc) {
+        .fork_exec => |cmd| if (cmd.pid) |pid| {
+            _ = td.surface_mailbox.push(.{
+                .pid_available = @intCast(pid),
+            }, .{ .forever = {} });
+        },
+        .flatpak => {},
+    };
+
     // Track our process start time for abnormal exits
     const process_start = try std.time.Instant.now();
 
