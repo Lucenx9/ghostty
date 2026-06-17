@@ -210,9 +210,9 @@ pub export fn ghostty_gtk_surface_exit_code(
 
 /// Write the PID of the surface's child process into `out_pid`. Returns 1 if
 /// the PID is available, 0 if the surface is invalid/not yet initialized or the
-/// child has not been spawned yet. The PID is cached on the core surface from a
-/// mailbox message drained on the GTK main thread, so this is safe to call from
-/// the host's GTK main thread.
+/// child has not been spawned yet. Prefer the cached child PID handed off from
+/// the IO thread; if that startup mailbox has not been observed yet, fall back
+/// to the PTY foreground PID exposed by Ghostty's existing embedded API.
 pub export fn ghostty_gtk_surface_child_pid(
     surface_: ?*gtk.Widget,
     out_pid: ?*i64,
@@ -221,8 +221,12 @@ pub export fn ghostty_gtk_surface_child_pid(
     const surface_widget = surface_ orelse return 0;
     const surface = gobject.ext.cast(Surface, surface_widget) orelse return 0;
     const core_surface = surface.core() orelse return 0;
-    const pid = core_surface.child_pid orelse return 0;
-    out.* = pid;
+    if (core_surface.child_pid) |pid| {
+        out.* = pid;
+        return 1;
+    }
+    const foreground_pid = core_surface.getProcessInfo(.foreground_pid) orelse return 0;
+    out.* = std.math.cast(i64, foreground_pid) orelse return 0;
     return 1;
 }
 
