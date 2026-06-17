@@ -51,6 +51,7 @@ snap: bool = false,
 emit_bench: bool = false,
 emit_docs: bool = false,
 emit_exe: bool = false,
+emit_gtk_lib: bool = false,
 emit_helpgen: bool = false,
 emit_lib_vt: bool = false,
 emit_macos_app: bool = false,
@@ -356,11 +357,17 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
         "Set defaults for a libghostty-vt-only build (disables xcframework, macOS app, and docs).",
     ) orelse false;
 
+    config.emit_gtk_lib = b.option(
+        bool,
+        "emit-gtk-lib",
+        "Build and install the experimental GTK embedding shared library.",
+    ) orelse false;
+
     config.emit_exe = b.option(
         bool,
         "emit-exe",
         "Build and install main executables with 'build'",
-    ) orelse !config.emit_lib_vt;
+    ) orelse !config.emit_lib_vt and !config.emit_gtk_lib;
 
     config.emit_test_exe = b.option(
         bool,
@@ -395,6 +402,7 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
         if (config.emit_bench or
             config.emit_test_exe or
             config.emit_helpgen or
+            config.emit_gtk_lib or
             config.emit_lib_vt) break :emit_docs false;
 
         // We always emit docs in system package mode.
@@ -455,6 +463,7 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
             defer if (path) |p| b.allocator.free(p);
             break :emit_xcfw path != null;
         }
+        if (config.emit_gtk_lib) break :emit_xcfw false;
         break :emit_xcfw config.app_runtime == .none and
             (!config.emit_bench and
                 !config.emit_test_exe and

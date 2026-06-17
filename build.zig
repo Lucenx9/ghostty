@@ -173,6 +173,14 @@ pub fn build(b: *std.Build) !void {
     // Helpgen
     if (config.emit_helpgen) deps.help_strings.install();
 
+    if (config.emit_gtk_lib) {
+        if (config.app_runtime != .gtk) return error.GtkLibRequiresGtkRuntime;
+
+        const gtk_lib = try buildpkg.GhosttyGtkLib.initShared(b, &deps);
+        gtk_lib.installHeader();
+        gtk_lib.install("ghostty-gtk-embed.so");
+    }
+
     // Runtime "none" is libghostty, anything else is an executable.
     if (config.app_runtime != .none) {
         if (config.emit_exe) {
