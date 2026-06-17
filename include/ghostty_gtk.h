@@ -64,6 +64,17 @@ int ghostty_gtk_surface_child_pid(GtkWidget *surface, int64_t *out_pid);
 // action name is unknown, or the action reported no effect.
 int ghostty_gtk_surface_perform_action(GtkWidget *surface, const char *action);
 
+// Injects already terminal-ready bytes (CR/LF normalized by the caller) into
+// the surface's terminal VT stream (scrollback/screen) WITHOUT writing them to
+// the child PTY. Used to restore persisted scrollback on respawn, so restored
+// output is not replayed as shell input. Returns 1 on success, 0 if the surface
+// is invalid or not yet initialized.
+int ghostty_gtk_surface_restore_scrollback(
+    GtkWidget *surface,
+    const char *text,
+    size_t text_len
+);
+
 void ghostty_gtk_surface_free(GtkWidget *surface);
 
 #ifdef __cplusplus

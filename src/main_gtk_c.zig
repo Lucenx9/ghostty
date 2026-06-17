@@ -147,6 +147,29 @@ pub export fn ghostty_gtk_surface_send_text(
     return 1;
 }
 
+/// Inject already terminal-ready bytes (CR/LF normalized by the caller) into
+/// the surface's terminal VT stream (scrollback/screen) WITHOUT writing them to
+/// the child PTY, so restored scrollback is not replayed as shell input. Routes
+/// through the IO thread (processOutput) the same way writeBytes routes through
+/// queueWrite. Returns 1 on success, 0 if the surface is invalid/not yet
+/// initialized.
+pub export fn ghostty_gtk_surface_restore_scrollback(
+    surface_: ?*gtk.Widget,
+    text_: ?[*]const u8,
+    text_len: usize,
+) c_int {
+    if (text_len == 0) return 1;
+    const surface_widget = surface_ orelse return 0;
+    const text_ptr = text_ orelse return 0;
+    const surface = gobject.ext.cast(Surface, surface_widget) orelse return 0;
+    const core_surface = surface.core() orelse return 0;
+    core_surface.injectOutput(text_ptr[0..text_len]) catch |err| {
+        std.log.warn("failed to restore scrollback to Ghostty GTK surface: {}", .{err});
+        return 0;
+    };
+    return 1;
+}
+
 pub const GhosttyGtkText = extern struct {
     text: ?[*]u8,
     text_len: usize,

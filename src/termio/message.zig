@@ -82,6 +82,13 @@ pub const Message = union(enum) {
     /// Write where the data is allocated and must be freed.
     write_alloc: WriteReq.Alloc,
 
+    /// Inject bytes directly into the terminal VT stream (scrollback/screen)
+    /// without writing them to the child PTY. Used to restore persisted
+    /// scrollback when re-spawning an embedded surface. Reuses the WriteReq
+    /// data carrier so @sizeOf(Message) does not grow (WriteReq.Alloc is
+    /// smaller than write_small).
+    inject_output: WriteReq.Alloc,
+
     /// Return a write request for the given data. This will use
     /// write_small if it fits or write_alloc otherwise. This should NOT
     /// be used for stable pointers which can be manually set to write_stable.

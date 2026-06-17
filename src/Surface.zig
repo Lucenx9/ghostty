@@ -890,6 +890,22 @@ pub fn writeBytes(self: *Surface, data: []const u8) !void {
     ), .unlocked);
 }
 
+/// Inject bytes into the terminal VT stream (scrollback/screen) WITHOUT
+/// writing them to the child PTY. Used to restore persisted scrollback on
+/// respawn. Mirrors writeBytes plumbing but routes to processOutput on the
+/// IO thread. queueIo's readonly guard only filters write_*, so inject
+/// correctly passes through even in readonly mode (it is display state, not
+/// a PTY write).
+pub fn injectOutput(self: *Surface, data: []const u8) !void {
+    if (data.len == 0) return;
+    const buf = try self.alloc.dupe(u8, data);
+    errdefer self.alloc.free(buf);
+    self.queueIo(.{ .inject_output = .{
+        .alloc = self.alloc,
+        .data = buf,
+    } }, .unlocked);
+}
+
 /// Forces the surface to render. This is useful for when the surface
 /// is in the middle of animation (such as a resize, etc.) or when
 /// the render timer is managed manually by the apprt.
