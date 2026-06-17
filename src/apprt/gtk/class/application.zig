@@ -1339,6 +1339,11 @@ pub const Application = extern struct {
         // Setup our style manager (light/dark mode)
         self.startupStyleManager();
 
+        if (comptime isGtkEmbeddingLibrary()) {
+            log.debug("skipping full GTK application shell startup for embedding library", .{});
+            return;
+        }
+
         // Setup some signal handlers
         self.startupSignals();
 
