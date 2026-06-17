@@ -1,6 +1,8 @@
 #ifndef GHOSTTY_GTK_H
 #define GHOSTTY_GTK_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -19,6 +21,11 @@ GtkWidget *ghostty_gtk_surface_new(ghostty_gtk_context_t *context);
 GtkWidget *ghostty_gtk_surface_new_with_working_directory(
     ghostty_gtk_context_t *context,
     const char *working_directory
+);
+int ghostty_gtk_surface_send_text(
+    GtkWidget *surface,
+    const char *text,
+    size_t text_len
 );
 void ghostty_gtk_surface_free(GtkWidget *surface);
 

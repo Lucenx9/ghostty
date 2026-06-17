@@ -875,6 +875,15 @@ fn queueIo(
     self.io.queueMessage(msg, mutex);
 }
 
+/// Write raw bytes to the terminal's PTY.
+pub fn writeBytes(self: *Surface, data: []const u8) !void {
+    if (data.len == 0) return;
+    self.queueIo(try termio.Message.writeReq(
+        self.alloc,
+        data,
+    ), .unlocked);
+}
+
 /// Forces the surface to render. This is useful for when the surface
 /// is in the middle of animation (such as a resize, etc.) or when
 /// the render timer is managed manually by the apprt.

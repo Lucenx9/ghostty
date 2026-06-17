@@ -7,6 +7,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const gio = @import("gio");
 const glib = @import("glib");
+const gobject = @import("gobject");
 const gtk = @import("gtk");
 
 const main = @import("main_ghostty.zig");
@@ -126,6 +127,23 @@ pub export fn ghostty_gtk_surface_new_with_working_directory(
     const context = context_ orelse return null;
     const working_directory = if (working_directory_) |ptr| std.mem.span(ptr) else null;
     return surfaceNew(context, working_directory);
+}
+
+pub export fn ghostty_gtk_surface_send_text(
+    surface_: ?*gtk.Widget,
+    text_: ?[*]const u8,
+    text_len: usize,
+) c_int {
+    if (text_len == 0) return 1;
+    const surface_widget = surface_ orelse return 0;
+    const text_ptr = text_ orelse return 0;
+    const surface = gobject.ext.cast(Surface, surface_widget) orelse return 0;
+    const core_surface = surface.core() orelse return 0;
+    core_surface.writeBytes(text_ptr[0..text_len]) catch |err| {
+        std.log.warn("failed to send text to Ghostty GTK surface: {}", .{err});
+        return 0;
+    };
+    return 1;
 }
 
 pub export fn ghostty_gtk_surface_free(surface_: ?*gtk.Widget) void {
