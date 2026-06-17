@@ -486,6 +486,18 @@ pub fn performAllAction(
 
 /// Handle a window message
 fn surfaceMessage(self: *App, surface: *Surface, msg: apprt.surface.Message) !void {
+    // The child PID can arrive as soon as the IO thread spawns the subprocess,
+    // before the runtime surface has been registered in `self.surfaces`. Cache
+    // it directly so early startup ordering does not drop PID discovery for
+    // embedders.
+    switch (msg) {
+        .pid_available => |pid| {
+            surface.child_pid = pid;
+            return;
+        },
+        else => {},
+    }
+
     // We want to ensure our window is still active. Window messages
     // are quite rare and we normally don't have many windows so we do
     // a simple linear search here.
