@@ -105,12 +105,27 @@ pub export fn ghostty_gtk_context_tick(context_: ?*Context) c_int {
     return 1;
 }
 
-pub export fn ghostty_gtk_surface_new(context_: ?*Context) ?*gtk.Widget {
-    const context = context_ orelse return null;
+fn surfaceNew(context: *Context, working_directory: ?[:0]const u8) ?*gtk.Widget {
     if (ghostty_gtk_context_register(context) == 0) return null;
 
-    const surface = Surface.new(.none);
+    const surface = Surface.new(.{
+        .working_directory = working_directory,
+    });
     return surface.refSink().as(gtk.Widget);
+}
+
+pub export fn ghostty_gtk_surface_new(context_: ?*Context) ?*gtk.Widget {
+    const context = context_ orelse return null;
+    return surfaceNew(context, null);
+}
+
+pub export fn ghostty_gtk_surface_new_with_working_directory(
+    context_: ?*Context,
+    working_directory_: ?[*:0]const u8,
+) ?*gtk.Widget {
+    const context = context_ orelse return null;
+    const working_directory = if (working_directory_) |ptr| std.mem.span(ptr) else null;
+    return surfaceNew(context, working_directory);
 }
 
 pub export fn ghostty_gtk_surface_free(surface_: ?*gtk.Widget) void {
