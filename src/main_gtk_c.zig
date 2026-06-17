@@ -53,16 +53,15 @@ pub export fn ghostty_gtk_context_new() ?*Context {
     };
     errdefer core_app.destroy();
 
-    var gtk_app: GtkApp = undefined;
-    gtk_app.init(core_app, .{}) catch |err| {
+    context.* = .{
+        .core_app = core_app,
+        .gtk_app = undefined,
+    };
+    context.gtk_app.init(core_app, .{}) catch |err| {
         std.log.err("failed to create Ghostty GTK app: {}", .{err});
         return null;
     };
 
-    context.* = .{
-        .core_app = core_app,
-        .gtk_app = gtk_app,
-    };
     Application.setEmbeddedDefault(context.gtk_app.app);
     return context;
 }
