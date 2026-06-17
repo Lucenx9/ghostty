@@ -45,6 +45,12 @@ const OpenURI = @import("../portal.zig").OpenURI;
 
 const log = std.log.scoped(.gtk_ghostty_application);
 
+var embedded_default_application: ?*Application = null;
+
+fn isGtkEmbeddingLibrary() bool {
+    return build_config.artifact == .lib and build_config.app_runtime == .gtk;
+}
+
 /// Function used to funnel GLib/GObject/GTK log messages into Zig's logging
 /// system rather than just getting dumped directly to stderr.
 fn glibLogWriterFunction(
@@ -228,8 +234,22 @@ pub const Application = extern struct {
     /// default application is a GhosttyApplication. The program would have
     /// to be in a very bad state for this to be violated.
     pub fn default() *Self {
+        if (comptime isGtkEmbeddingLibrary()) {
+            if (embedded_default_application) |app| return app;
+        }
+
         const app = gio.Application.getDefault().?;
         return gobject.ext.cast(Self, app).?;
+    }
+
+    /// Set the application used by embedded GTK surfaces.
+    ///
+    /// A GTK shared library loaded into another application cannot safely
+    /// replace the host process' default GApplication. The regular Ghostty
+    /// executable still uses `gio.Application.getDefault`; the embedding
+    /// library uses this pointer instead.
+    pub fn setEmbeddedDefault(app: ?*Self) void {
+        embedded_default_application = app;
     }
 
     /// Creates a new Application instance.
@@ -1299,8 +1319,14 @@ pub const Application = extern struct {
             self.as(Parent),
         );
 
-        // Set ourselves as the default application.
-        gio.Application.setDefault(self.as(gio.Application));
+        // Set ourselves as the default application. The embedding library keeps
+        // its Ghostty application separate so it does not overwrite the host
+        // GTK application's process default.
+        if (comptime isGtkEmbeddingLibrary()) {
+            embedded_default_application = self;
+        } else {
+            gio.Application.setDefault(self.as(gio.Application));
+        }
 
         // The D-Bus connection is only valid after GApplication startup.
         self.openUri().setDbusConnection(

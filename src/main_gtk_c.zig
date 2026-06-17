@@ -13,6 +13,7 @@ const main = @import("main_ghostty.zig");
 const state = &@import("global.zig").state;
 const CoreApp = @import("App.zig");
 const GtkApp = @import("apprt/gtk/App.zig");
+const Application = @import("apprt/gtk/class/application.zig").Application;
 const Surface = @import("apprt/gtk/class/surface.zig").Surface;
 
 pub const std_options = main.std_options;
@@ -62,6 +63,7 @@ pub export fn ghostty_gtk_context_new() ?*Context {
         .core_app = core_app,
         .gtk_app = gtk_app,
     };
+    Application.setEmbeddedDefault(context.gtk_app.app);
     return context;
 }
 
@@ -70,6 +72,7 @@ pub export fn ghostty_gtk_context_free(context_: ?*Context) void {
     const alloc = std.heap.c_allocator;
 
     context.gtk_app.terminate();
+    Application.setEmbeddedDefault(null);
     context.gtk_app.app.unref();
     context.core_app.destroy();
     alloc.destroy(context);
