@@ -2873,6 +2873,10 @@ const Action = struct {
 ///
 /// This must be called BEFORE GTK initialization.
 fn setGtkEnv(config: *const CoreConfig) error{NoSpaceLeft}!void {
+    if (gtk.isInitialized() != 0 and comptime isGtkEmbeddingLibrary()) {
+        log.debug("skipping GTK environment setup because host GTK is already initialized", .{});
+        return;
+    }
     assert(gtk.isInitialized() == 0);
 
     var gdk_debug: struct {
