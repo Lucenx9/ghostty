@@ -666,6 +666,10 @@ pub const Surface = extern struct {
         /// True when the child has exited.
         child_exited: bool = false,
 
+        /// Exit code of the child process, valid only when `child_exited`
+        /// is true. Exposed to embedders via `ghostty_gtk_surface_exit_code`.
+        child_exit_code: u32 = 0,
+
         // Progress bar
         progress_bar_timer: ?c_uint = null,
 
@@ -766,6 +770,13 @@ pub const Surface = extern struct {
     pub fn core(self: *Self) ?*CoreSurface {
         const priv = self.private();
         return priv.core_surface;
+    }
+
+    /// The exit code of the child process, or null if it has not exited.
+    pub fn childExitCode(self: *Self) ?u32 {
+        const priv = self.private();
+        if (!priv.child_exited) return null;
+        return priv.child_exit_code;
     }
 
     pub fn rt(self: *Self) *ApprtSurface {
@@ -1514,6 +1525,7 @@ pub const Surface = extern struct {
         // up to date for anyone listening.
         const priv = self.private();
         priv.child_exited = true;
+        priv.child_exit_code = data.exit_code;
         self.as(gobject.Object).notifyByPspec(
             properties.@"child-exited".impl.param_spec,
         );
@@ -3460,6 +3472,17 @@ pub const Surface = extern struct {
             try wd_val.finalize(config_alloc);
             config.@"working-directory" = wd_val;
         }
+
+        // A GTK surface normally owns one child lifecycle, but reset the
+        // exported child-exit cache before starting a core surface so embedders
+        // never observe a stale exit code if this widget is ever reinitialized.
+        if (priv.child_exited) {
+            priv.child_exited = false;
+            self.as(gobject.Object).notifyByPspec(
+                properties.@"child-exited".impl.param_spec,
+            );
+        }
+        priv.child_exit_code = 0;
 
         // Initialize the surface
         surface.init(

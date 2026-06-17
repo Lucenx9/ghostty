@@ -45,6 +45,12 @@ int ghostty_gtk_surface_read_text(
     ghostty_gtk_text_t *out
 );
 void ghostty_gtk_text_free(ghostty_gtk_text_t *text);
+
+// Writes the child process exit code to *out_code and returns 1 if the
+// surface's child has exited; returns 0 (leaving *out_code untouched) if it
+// is still running or the surface is invalid.
+int ghostty_gtk_surface_exit_code(GtkWidget *surface, uint32_t *out_code);
+
 void ghostty_gtk_surface_free(GtkWidget *surface);
 
 #ifdef __cplusplus

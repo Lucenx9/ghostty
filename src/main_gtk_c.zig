@@ -195,6 +195,18 @@ pub export fn ghostty_gtk_text_free(text_: ?*GhosttyGtkText) void {
     clearText(text);
 }
 
+pub export fn ghostty_gtk_surface_exit_code(
+    surface_: ?*gtk.Widget,
+    out_code: ?*u32,
+) c_int {
+    const out = out_code orelse return 0;
+    const surface_widget = surface_ orelse return 0;
+    const surface = gobject.ext.cast(Surface, surface_widget) orelse return 0;
+    const code = surface.childExitCode() orelse return 0;
+    out.* = code;
+    return 1;
+}
+
 pub export fn ghostty_gtk_surface_free(surface_: ?*gtk.Widget) void {
     const surface = surface_ orelse return;
     surface.unref();
