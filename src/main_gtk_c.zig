@@ -111,7 +111,7 @@ pub export fn ghostty_gtk_surface_new(context_: ?*Context) ?*gtk.Widget {
     if (ghostty_gtk_context_register(context) == 0) return null;
 
     const surface = Surface.new(.none);
-    return surface.as(gtk.Widget);
+    return surface.refSink().as(gtk.Widget);
 }
 
 pub export fn ghostty_gtk_surface_free(surface_: ?*gtk.Widget) void {

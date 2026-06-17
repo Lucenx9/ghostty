@@ -13,6 +13,8 @@ void ghostty_gtk_context_free(ghostty_gtk_context_t *context);
 int ghostty_gtk_context_register(ghostty_gtk_context_t *context);
 int ghostty_gtk_context_tick(ghostty_gtk_context_t *context);
 
+// Returns a full reference. Callers should unref with ghostty_gtk_surface_free
+// after the widget is no longer needed.
 GtkWidget *ghostty_gtk_surface_new(ghostty_gtk_context_t *context);
 void ghostty_gtk_surface_free(GtkWidget *surface);
 
