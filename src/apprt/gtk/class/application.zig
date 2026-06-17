@@ -1336,13 +1336,13 @@ pub const Application = extern struct {
         // Setup our event loop
         self.startupXev();
 
-        // Setup our style manager (light/dark mode)
-        self.startupStyleManager();
-
         if (comptime isGtkEmbeddingLibrary()) {
-            log.debug("skipping full GTK application shell startup for embedding library", .{});
+            log.debug("skipping GTK application style and shell startup for embedding library", .{});
             return;
         }
+
+        // Setup our style manager (light/dark mode)
+        self.startupStyleManager();
 
         // Setup some signal handlers
         self.startupSignals();
