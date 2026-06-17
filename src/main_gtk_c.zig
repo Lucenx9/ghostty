@@ -146,6 +146,55 @@ pub export fn ghostty_gtk_surface_send_text(
     return 1;
 }
 
+pub const GhosttyGtkText = extern struct {
+    text: ?[*]u8,
+    text_len: usize,
+    cols: u32,
+    rows: u32,
+};
+
+fn clearText(text: *GhosttyGtkText) void {
+    text.* = .{
+        .text = null,
+        .text_len = 0,
+        .cols = 0,
+        .rows = 0,
+    };
+}
+
+pub export fn ghostty_gtk_surface_read_text(
+    surface_: ?*gtk.Widget,
+    scope_raw: c_int,
+    out_: ?*GhosttyGtkText,
+) c_int {
+    const out = out_ orelse return 0;
+    clearText(out);
+
+    const surface_widget = surface_ orelse return 0;
+    const surface = gobject.ext.cast(Surface, surface_widget) orelse return 0;
+    const core_surface = surface.core() orelse return 0;
+    const scope: @import("Surface.zig").PlainTextScope = @enumFromInt(scope_raw);
+    const text = core_surface.dumpPlainText(std.heap.c_allocator, scope) catch |err| {
+        std.log.warn("failed to read text from Ghostty GTK surface: {}", .{err});
+        return 0;
+    };
+    out.* = .{
+        .text = @ptrCast(@constCast(text.text.ptr)),
+        .text_len = text.text.len,
+        .cols = text.cols,
+        .rows = text.rows,
+    };
+    return 1;
+}
+
+pub export fn ghostty_gtk_text_free(text_: ?*GhosttyGtkText) void {
+    const text = text_ orelse return;
+    if (text.text) |ptr| {
+        std.heap.c_allocator.free(ptr[0..text.text_len]);
+    }
+    clearText(text);
+}
+
 pub export fn ghostty_gtk_surface_free(surface_: ?*gtk.Widget) void {
     const surface = surface_ orelse return;
     surface.unref();

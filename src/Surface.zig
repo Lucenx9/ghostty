@@ -1921,6 +1921,46 @@ pub fn dumpText(
     return try self.dumpTextLocked(alloc, sel);
 }
 
+pub const PlainTextScope = enum(c_int) {
+    visible = 0,
+    all = 1,
+    _,
+};
+
+pub const PlainText = struct {
+    text: []const u8,
+    cols: u32,
+    rows: u32,
+
+    pub fn deinit(self: *PlainText, alloc: Allocator) void {
+        alloc.free(self.text);
+    }
+};
+
+pub fn dumpPlainText(
+    self: *Surface,
+    alloc: Allocator,
+    scope: PlainTextScope,
+) !PlainText {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+
+    const point: terminal.Point = switch (scope) {
+        .visible => .{ .viewport = .{} },
+        .all => .{ .screen = .{} },
+        _ => return error.InvalidPlainTextScope,
+    };
+    const text = try self.io.terminal.screens.active.dumpStringAlloc(alloc, point);
+    errdefer alloc.free(text);
+
+    const grid = self.size.grid();
+    return .{
+        .text = text,
+        .cols = @intCast(grid.columns),
+        .rows = @intCast(grid.rows),
+    };
+}
+
 /// Same as `dumpText` but assumes the renderer state mutex is already
 /// held.
 pub fn dumpTextLocked(
