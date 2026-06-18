@@ -34,6 +34,12 @@ GtkWidget *ghostty_gtk_surface_new_with_working_directory(
     ghostty_gtk_context_t *context,
     const char *working_directory
 );
+GtkWidget *ghostty_gtk_surface_new_with_working_directory_and_command(
+    ghostty_gtk_context_t *context,
+    const char *working_directory,
+    const char *const *argv,
+    size_t argv_len
+);
 int ghostty_gtk_surface_send_text(
     GtkWidget *surface,
     const char *text,

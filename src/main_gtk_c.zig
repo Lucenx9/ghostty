@@ -17,6 +17,7 @@ const CoreApp = @import("App.zig");
 const GtkApp = @import("apprt/gtk/App.zig");
 const Application = @import("apprt/gtk/class/application.zig").Application;
 const Surface = @import("apprt/gtk/class/surface.zig").Surface;
+const configpkg = @import("config.zig");
 
 pub const std_options = main.std_options;
 
@@ -107,10 +108,15 @@ pub export fn ghostty_gtk_context_tick(context_: ?*Context) c_int {
     return 1;
 }
 
-fn surfaceNew(context: *Context, working_directory: ?[:0]const u8) ?*gtk.Widget {
+fn surfaceNew(
+    context: *Context,
+    working_directory: ?[:0]const u8,
+    command: ?configpkg.Command,
+) ?*gtk.Widget {
     if (ghostty_gtk_context_register(context) == 0) return null;
 
     const surface = Surface.new(.{
+        .command = command,
         .working_directory = working_directory,
     });
     return surface.refSink().as(gtk.Widget);
@@ -118,7 +124,7 @@ fn surfaceNew(context: *Context, working_directory: ?[:0]const u8) ?*gtk.Widget 
 
 pub export fn ghostty_gtk_surface_new(context_: ?*Context) ?*gtk.Widget {
     const context = context_ orelse return null;
-    return surfaceNew(context, null);
+    return surfaceNew(context, null, null);
 }
 
 pub export fn ghostty_gtk_surface_new_with_working_directory(
@@ -127,7 +133,28 @@ pub export fn ghostty_gtk_surface_new_with_working_directory(
 ) ?*gtk.Widget {
     const context = context_ orelse return null;
     const working_directory = if (working_directory_) |ptr| std.mem.span(ptr) else null;
-    return surfaceNew(context, working_directory);
+    return surfaceNew(context, working_directory, null);
+}
+
+pub export fn ghostty_gtk_surface_new_with_working_directory_and_command(
+    context_: ?*Context,
+    working_directory_: ?[*:0]const u8,
+    argv_: ?[*]const [*:0]const u8,
+    argv_len: usize,
+) ?*gtk.Widget {
+    const context = context_ orelse return null;
+    const argv_ptr = argv_ orelse return null;
+    if (argv_len == 0) return null;
+
+    const working_directory = if (working_directory_) |ptr| std.mem.span(ptr) else null;
+    const alloc = std.heap.c_allocator;
+    const argv = alloc.alloc([:0]const u8, argv_len) catch return null;
+    defer alloc.free(argv);
+    for (argv_ptr[0..argv_len], 0..) |arg, index| {
+        argv[index] = std.mem.span(arg);
+    }
+    const command: configpkg.Command = .{ .direct = argv };
+    return surfaceNew(context, working_directory, command);
 }
 
 pub export fn ghostty_gtk_surface_send_text(
