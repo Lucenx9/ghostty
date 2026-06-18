@@ -741,6 +741,7 @@ pub const Surface = extern struct {
         overrides: struct {
             command: ?configpkg.Command = null,
             working_directory: ?[:0]const u8 = null,
+            scrollback_limit: ?usize = null,
 
             pub const none: @This() = .{};
         } = .none,
@@ -751,6 +752,7 @@ pub const Surface = extern struct {
     pub fn new(overrides: struct {
         command: ?configpkg.Command = null,
         working_directory: ?[:0]const u8 = null,
+        scrollback_limit: ?usize = null,
         title: ?[:0]const u8 = null,
 
         pub const none: @This() = .{};
@@ -763,6 +765,7 @@ pub const Surface = extern struct {
         priv.overrides = .{
             .command = if (overrides.command) |c| c.clone(alloc) catch null else null,
             .working_directory = if (overrides.working_directory) |wd| alloc.dupeZ(u8, wd) catch null else null,
+            .scrollback_limit = overrides.scrollback_limit,
         };
         return self;
     }
@@ -3462,6 +3465,9 @@ pub const Surface = extern struct {
             var wd_val: configpkg.WorkingDirectory = .{ .path = try config_alloc.dupe(u8, wd) };
             try wd_val.finalize(config_alloc);
             config.@"working-directory" = wd_val;
+        }
+        if (priv.overrides.scrollback_limit) |limit| {
+            config.@"scrollback-limit" = limit;
         }
 
         // Properties that can impact surface init

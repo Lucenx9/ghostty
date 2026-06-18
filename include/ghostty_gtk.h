@@ -40,6 +40,13 @@ GtkWidget *ghostty_gtk_surface_new_with_working_directory_and_command(
     const char *const *argv,
     size_t argv_len
 );
+GtkWidget *ghostty_gtk_surface_new_with_working_directory_command_and_scrollback_limit(
+    ghostty_gtk_context_t *context,
+    const char *working_directory,
+    const char *const *argv,
+    size_t argv_len,
+    size_t scrollback_limit
+);
 int ghostty_gtk_surface_send_text(
     GtkWidget *surface,
     const char *text,
