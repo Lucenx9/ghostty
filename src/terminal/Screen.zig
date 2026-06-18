@@ -3199,6 +3199,120 @@ pub fn dumpStringAlloc(
     return try builder.toOwnedSlice();
 }
 
+/// Like `dumpStringAlloc`, but allocates at most `max_bytes + 1` bytes of
+/// dumped text. The extra byte lets callers detect truncation without asking
+/// Ghostty to materialize an unbounded scrollback string.
+pub fn dumpStringAllocBounded(
+    self: *const Screen,
+    alloc: Allocator,
+    tl: point.Point,
+    max_bytes: usize,
+    from_end: bool,
+) ![]const u8 {
+    const cap = if (max_bytes == std.math.maxInt(usize)) max_bytes else max_bytes + 1;
+    if (from_end) return self.dumpStringAllocTailBounded(alloc, tl, cap);
+    return self.dumpStringAllocHeadBounded(alloc, tl, cap);
+}
+
+fn dumpStringAllocHeadBounded(
+    self: *const Screen,
+    alloc: Allocator,
+    tl: point.Point,
+    cap: usize,
+) ![]const u8 {
+    const scratch = try alloc.alloc(u8, cap);
+    defer alloc.free(scratch);
+
+    var writer: std.Io.Writer = .fixed(scratch);
+    self.dumpString(&writer, .{
+        .tl = self.pages.getTopLeft(tl),
+        .br = self.pages.getBottomRight(tl) orelse return error.UnknownPoint,
+        .unwrap = false,
+    }) catch |err| switch (err) {
+        error.WriteFailed => {},
+    };
+
+    return try alloc.dupe(u8, writer.buffered());
+}
+
+fn dumpStringAllocTailBounded(
+    self: *const Screen,
+    alloc: Allocator,
+    tl: point.Point,
+    cap: usize,
+) ![]const u8 {
+    const ring = try alloc.alloc(u8, cap);
+    defer alloc.free(ring);
+
+    var tail_writer: TailBoundedWriter = .init(ring);
+    try self.dumpString(&tail_writer.writer, .{
+        .tl = self.pages.getTopLeft(tl),
+        .br = self.pages.getBottomRight(tl) orelse return error.UnknownPoint,
+        .unwrap = false,
+    });
+    return try tail_writer.toOwnedSlice(alloc);
+}
+
+const TailBoundedWriter = struct {
+    ring: []u8,
+    total: usize = 0,
+    writer: std.Io.Writer,
+
+    fn init(ring: []u8) TailBoundedWriter {
+        return .{
+            .ring = ring,
+            .writer = .{
+                .vtable = &.{
+                    .drain = TailBoundedWriter.drain,
+                },
+                .buffer = &.{},
+            },
+        };
+    }
+
+    fn drain(
+        w: *std.Io.Writer,
+        data: []const []const u8,
+        splat: usize,
+    ) std.Io.Writer.Error!usize {
+        const self: *TailBoundedWriter = @alignCast(@fieldParentPtr("writer", w));
+        const slices = data[0 .. data.len - 1];
+        const pattern = data[slices.len];
+        var written: usize = 0;
+        for (slices) |bytes| {
+            self.remember(bytes);
+            written += bytes.len;
+        }
+        for (0..splat) |_| {
+            self.remember(pattern);
+            written += pattern.len;
+        }
+        return written;
+    }
+
+    fn remember(self: *TailBoundedWriter, bytes: []const u8) void {
+        for (bytes) |byte| {
+            self.ring[self.total % self.ring.len] = byte;
+            self.total += 1;
+        }
+    }
+
+    fn toOwnedSlice(self: *const TailBoundedWriter, alloc: Allocator) ![]const u8 {
+        const kept_len = @min(self.total, self.ring.len);
+        const out = try alloc.alloc(u8, kept_len);
+        if (self.total <= self.ring.len) {
+            @memcpy(out, self.ring[0..kept_len]);
+            return out;
+        }
+
+        const start = self.total % self.ring.len;
+        const first_len = self.ring.len - start;
+        @memcpy(out[0..first_len], self.ring[start..]);
+        @memcpy(out[first_len..], self.ring[0..start]);
+        return out;
+    }
+};
+
 /// You should use dumpString, this is a restricted version mostly for
 /// legacy and convenience reasons for unit tests.
 pub fn dumpStringAllocUnwrapped(
@@ -3408,6 +3522,32 @@ test "Screen read and write scrollback" {
         defer alloc.free(str);
         try testing.expectEqualStrings("world\ntest", str);
     }
+}
+
+test "Screen bounded dump keeps one byte past head limit" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var s = try Screen.init(alloc, .{ .cols = 80, .rows = 2, .max_scrollback = 1000 });
+    defer s.deinit();
+
+    try s.testWriteString("hello\nworld\ntest");
+    const str = try s.dumpStringAllocBounded(alloc, .{ .screen = .{} }, 6, false);
+    defer alloc.free(str);
+    try testing.expectEqualStrings("hello\nw", str);
+}
+
+test "Screen bounded dump can keep tail bytes" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var s = try Screen.init(alloc, .{ .cols = 80, .rows = 2, .max_scrollback = 1000 });
+    defer s.deinit();
+
+    try s.testWriteString("hello\nworld\ntest");
+    const str = try s.dumpStringAllocBounded(alloc, .{ .screen = .{} }, 6, true);
+    defer alloc.free(str);
+    try testing.expectEqualStrings("ld\ntest", str);
 }
 
 test "Screen read and write no scrollback small" {

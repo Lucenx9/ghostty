@@ -1985,6 +1985,37 @@ pub fn dumpPlainText(
     };
 }
 
+pub fn dumpPlainTextLimited(
+    self: *Surface,
+    alloc: Allocator,
+    scope: PlainTextScope,
+    max_bytes: usize,
+    from_end: bool,
+) !PlainText {
+    self.renderer_state.mutex.lock();
+    defer self.renderer_state.mutex.unlock();
+
+    const point: terminal.Point = switch (scope) {
+        .visible => .{ .viewport = .{} },
+        .all => .{ .screen = .{} },
+        _ => return error.InvalidPlainTextScope,
+    };
+    const text = try self.io.terminal.screens.active.dumpStringAllocBounded(
+        alloc,
+        point,
+        max_bytes,
+        from_end,
+    );
+    errdefer alloc.free(text);
+
+    const grid = self.size.grid();
+    return .{
+        .text = text,
+        .cols = @intCast(grid.columns),
+        .rows = @intCast(grid.rows),
+    };
+}
+
 /// Same as `dumpText` but assumes the renderer state mutex is already
 /// held.
 pub fn dumpTextLocked(

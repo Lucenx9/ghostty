@@ -50,6 +50,13 @@ int ghostty_gtk_surface_read_text(
     ghostty_gtk_text_scope_t scope,
     ghostty_gtk_text_t *out
 );
+int ghostty_gtk_surface_read_text_limited(
+    GtkWidget *surface,
+    ghostty_gtk_text_scope_t scope,
+    size_t max_bytes,
+    int truncate_from_end,
+    ghostty_gtk_text_t *out
+);
 void ghostty_gtk_text_free(ghostty_gtk_text_t *text);
 
 // Writes the child process exit code to *out_code and returns 1 if the

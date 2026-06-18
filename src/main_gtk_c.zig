@@ -238,6 +238,38 @@ pub export fn ghostty_gtk_surface_read_text(
     return 1;
 }
 
+pub export fn ghostty_gtk_surface_read_text_limited(
+    surface_: ?*gtk.Widget,
+    scope_raw: c_int,
+    max_bytes: usize,
+    truncate_from_end: c_int,
+    out_: ?*GhosttyGtkText,
+) c_int {
+    const out = out_ orelse return 0;
+    clearText(out);
+
+    const surface_widget = surface_ orelse return 0;
+    const surface = gobject.ext.cast(Surface, surface_widget) orelse return 0;
+    const core_surface = surface.core() orelse return 0;
+    const scope: @import("Surface.zig").PlainTextScope = @enumFromInt(scope_raw);
+    const text = core_surface.dumpPlainTextLimited(
+        std.heap.c_allocator,
+        scope,
+        max_bytes,
+        truncate_from_end != 0,
+    ) catch |err| {
+        std.log.warn("failed to read limited text from Ghostty GTK surface: {}", .{err});
+        return 0;
+    };
+    out.* = .{
+        .text = @ptrCast(@constCast(text.text.ptr)),
+        .text_len = text.text.len,
+        .cols = text.cols,
+        .rows = text.rows,
+    };
+    return 1;
+}
+
 pub export fn ghostty_gtk_text_free(text_: ?*GhosttyGtkText) void {
     const text = text_ orelse return;
     if (text.text) |ptr| {
