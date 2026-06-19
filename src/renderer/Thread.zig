@@ -95,7 +95,7 @@ flags: packed struct {
     /// This is true when a blinking cursor should be visible and false
     /// when it should not be visible. This is toggled on a timer by the
     /// thread automatically.
-    cursor_blink_visible: bool = false,
+    cursor_blink_visible: bool = true,
 
     /// This is true when the inspector is active.
     has_inspector: bool = false,
@@ -107,6 +107,10 @@ flags: packed struct {
     /// This is true when the view is focused. This defaults to true
     /// and it is up to the apprt to set the correct value.
     focused: bool = true,
+
+    /// Whether the cursor blink timer should be running based on the most
+    /// recently rendered terminal state.
+    cursor_blink_timer_enabled: bool = false,
 } = .{},
 
 pub const DerivedConfig = struct {
@@ -243,16 +247,6 @@ fn threadMain_(self: *Thread) !void {
     // Send an initial wakeup message so that we render right away.
     try self.wakeup.notify();
 
-    // Start blinking the cursor.
-    self.cursor_h.run(
-        &self.loop,
-        &self.cursor_c,
-        cursorBlinkInterval(),
-        Thread,
-        self,
-        cursorTimerCallback,
-    );
-
     // Start the draw timer
     self.syncDrawTimer();
 
@@ -333,6 +327,49 @@ fn syncDrawTimer(self: *Thread) void {
     );
 }
 
+fn syncCursorTimer(self: *Thread) void {
+    const should_run =
+        self.flags.visible and
+        self.flags.focused and
+        self.renderer.terminal_state.cursor.visible and
+        self.renderer.terminal_state.cursor.blinking and
+        self.renderer.terminal_state.cursor.viewport != null;
+
+    self.flags.cursor_blink_timer_enabled = should_run;
+
+    if (!should_run) {
+        // Keep steady cursors visible. The timer only exists to hide/show
+        // blinking cursors, so keeping it alive for steady cursors creates
+        // needless render wakeups.
+        self.flags.cursor_blink_visible = true;
+        if (self.cursor_c.state() == .active and
+            self.cursor_c_cancel.state() == .dead)
+        {
+            self.cursor_h.cancel(
+                &self.loop,
+                &self.cursor_c,
+                &self.cursor_c_cancel,
+                void,
+                null,
+                cursorCancelCallback,
+            );
+        }
+        return;
+    }
+
+    if (self.cursor_c.state() == .active) return;
+
+    self.flags.cursor_blink_visible = true;
+    self.cursor_h.run(
+        &self.loop,
+        &self.cursor_c,
+        cursorBlinkInterval(),
+        Thread,
+        self,
+        cursorTimerCallback,
+    );
+}
+
 /// Drain the mailbox.
 fn drainMailbox(self: *Thread) !void {
     // There's probably a more elegant way to do this...
@@ -368,18 +405,12 @@ fn drainMailbox(self: *Thread) !void {
                         self.flags.cursor_blink_visible,
                     ) catch |err|
                         log.warn("error rendering on visibility regain err={}", .{err});
+                    self.syncCursorTimer();
                     self.drawFrame(false);
                 }
 
                 // Notify the renderer so it can update any state.
                 self.renderer.setVisible(v);
-
-                // Note that we're explicitly today not stopping any
-                // cursor timers, draw timers, etc. These things have very
-                // little resource cost and properly maintaining their active
-                // state across different transitions is going to be bug-prone,
-                // so its easier to just let them keep firing and have them
-                // check the visible state themselves to control their behavior.
             },
 
             .focus => |v| focus: {
@@ -398,40 +429,14 @@ fn drainMailbox(self: *Thread) !void {
                 // We always resync our draw timer (may disable it)
                 self.syncDrawTimer();
 
-                if (!v) {
-                    // If we're not focused, then we stop the cursor blink
-                    if (self.cursor_c.state() == .active and
-                        self.cursor_c_cancel.state() == .dead)
-                    {
-                        self.cursor_h.cancel(
-                            &self.loop,
-                            &self.cursor_c,
-                            &self.cursor_c_cancel,
-                            void,
-                            null,
-                            cursorCancelCallback,
-                        );
-                    }
-                } else {
-                    // If we're focused, we immediately show the cursor again
-                    // and then restart the timer.
-                    if (self.cursor_c.state() != .active) {
-                        self.flags.cursor_blink_visible = true;
-                        self.cursor_h.run(
-                            &self.loop,
-                            &self.cursor_c,
-                            cursorBlinkInterval(),
-                            Thread,
-                            self,
-                            cursorTimerCallback,
-                        );
-                    }
-                }
+                self.syncCursorTimer();
             },
 
             .reset_cursor_blink => {
                 self.flags.cursor_blink_visible = true;
-                if (self.cursor_c.state() == .active) {
+                if (self.flags.cursor_blink_timer_enabled and
+                    self.cursor_c.state() == .active)
+                {
                     self.cursor_h.reset(
                         &self.loop,
                         &self.cursor_c,
@@ -442,6 +447,7 @@ fn drainMailbox(self: *Thread) !void {
                         cursorTimerCallback,
                     );
                 }
+                self.syncCursorTimer();
             },
 
             .font_grid => |grid| {
@@ -460,6 +466,7 @@ fn drainMailbox(self: *Thread) !void {
                 // Stop and start the draw timer to capture the new
                 // hasAnimations value.
                 self.syncDrawTimer();
+                self.syncCursorTimer();
             },
 
             .search_viewport_matches => |v| {
@@ -622,6 +629,7 @@ fn renderCallback(
         t.flags.cursor_blink_visible,
     ) catch |err|
         log.warn("error rendering err={}", .{err});
+    t.syncCursorTimer();
 
     // Draw
     t.drawFrame(false);
@@ -651,17 +659,24 @@ fn cursorTimerCallback(
         return .disarm;
     };
 
+    if (!t.flags.cursor_blink_timer_enabled) {
+        t.flags.cursor_blink_visible = true;
+        return .disarm;
+    }
+
     t.flags.cursor_blink_visible = !t.flags.cursor_blink_visible;
     t.wakeup.notify() catch {};
 
-    t.cursor_h.run(
-        &t.loop,
-        &t.cursor_c,
-        cursorBlinkInterval(),
-        Thread,
-        t,
-        cursorTimerCallback,
-    );
+    if (t.flags.cursor_blink_timer_enabled) {
+        t.cursor_h.run(
+            &t.loop,
+            &t.cursor_c,
+            cursorBlinkInterval(),
+            Thread,
+            t,
+            cursorTimerCallback,
+        );
+    }
     return .disarm;
 }
 
