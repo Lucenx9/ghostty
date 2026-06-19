@@ -742,6 +742,7 @@ pub const Surface = extern struct {
             command: ?configpkg.Command = null,
             working_directory: ?[:0]const u8 = null,
             scrollback_limit: ?usize = null,
+            cursor_style_blink: ?bool = null,
 
             pub const none: @This() = .{};
         } = .none,
@@ -753,6 +754,7 @@ pub const Surface = extern struct {
         command: ?configpkg.Command = null,
         working_directory: ?[:0]const u8 = null,
         scrollback_limit: ?usize = null,
+        cursor_style_blink: ?bool = null,
         title: ?[:0]const u8 = null,
 
         pub const none: @This() = .{};
@@ -766,6 +768,7 @@ pub const Surface = extern struct {
             .command = if (overrides.command) |c| c.clone(alloc) catch null else null,
             .working_directory = if (overrides.working_directory) |wd| alloc.dupeZ(u8, wd) catch null else null,
             .scrollback_limit = overrides.scrollback_limit,
+            .cursor_style_blink = overrides.cursor_style_blink,
         };
         return self;
     }
@@ -3468,6 +3471,9 @@ pub const Surface = extern struct {
         }
         if (priv.overrides.scrollback_limit) |limit| {
             config.@"scrollback-limit" = limit;
+        }
+        if (priv.overrides.cursor_style_blink) |blink| {
+            config.@"cursor-style-blink" = blink;
         }
 
         // Properties that can impact surface init

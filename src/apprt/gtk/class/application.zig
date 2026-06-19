@@ -45,7 +45,11 @@ const OpenURI = @import("../portal.zig").OpenURI;
 
 const log = std.log.scoped(.gtk_ghostty_application);
 
+pub const EmbeddedWakeupCallback = *const fn (?*anyopaque) callconv(.c) void;
+
 var embedded_default_application: ?*Application = null;
+var embedded_wakeup_callback: ?EmbeddedWakeupCallback = null;
+var embedded_wakeup_userdata: ?*anyopaque = null;
 
 fn isGtkEmbeddingLibrary() bool {
     return build_config.artifact == .lib and build_config.app_runtime == .gtk;
@@ -250,6 +254,16 @@ pub const Application = extern struct {
     /// library uses this pointer instead.
     pub fn setEmbeddedDefault(app: ?*Self) void {
         embedded_default_application = app;
+    }
+
+    /// Set the host callback used by the GTK embedding library to notify the
+    /// owner that the Ghostty core app has mailbox work ready to drain.
+    pub fn setEmbeddedWakeupCallback(
+        callback: ?EmbeddedWakeupCallback,
+        userdata: ?*anyopaque,
+    ) void {
+        embedded_wakeup_callback = callback;
+        embedded_wakeup_userdata = userdata;
     }
 
     /// Creates a new Application instance.
@@ -1304,7 +1318,13 @@ pub const Application = extern struct {
     // Libghostty Callbacks
 
     pub fn wakeup(self: *Self) void {
-        _ = self;
+        if (comptime isGtkEmbeddingLibrary()) {
+            if (embedded_default_application == self) {
+                if (embedded_wakeup_callback) |callback| {
+                    callback(embedded_wakeup_userdata);
+                }
+            }
+        }
         glib.MainContext.wakeup(null);
     }
 

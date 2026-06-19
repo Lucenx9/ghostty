@@ -16,6 +16,7 @@ typedef struct ghostty_gtk_text_s {
     uint32_t cols;
     uint32_t rows;
 } ghostty_gtk_text_t;
+typedef void (*ghostty_gtk_context_wakeup_fn)(void *userdata);
 
 typedef enum ghostty_gtk_text_scope_e {
     GHOSTTY_GTK_TEXT_VISIBLE = 0,
@@ -25,6 +26,11 @@ typedef enum ghostty_gtk_text_scope_e {
 ghostty_gtk_context_t *ghostty_gtk_context_new(void);
 void ghostty_gtk_context_free(ghostty_gtk_context_t *context);
 int ghostty_gtk_context_register(ghostty_gtk_context_t *context);
+int ghostty_gtk_context_set_wakeup_callback(
+    ghostty_gtk_context_t *context,
+    ghostty_gtk_context_wakeup_fn callback,
+    void *userdata
+);
 int ghostty_gtk_context_tick(ghostty_gtk_context_t *context);
 
 // Returns a full reference. Callers should unref with ghostty_gtk_surface_free

@@ -15,7 +15,8 @@ const input = @import("input.zig");
 const state = &@import("global.zig").state;
 const CoreApp = @import("App.zig");
 const GtkApp = @import("apprt/gtk/App.zig");
-const Application = @import("apprt/gtk/class/application.zig").Application;
+const gtk_application = @import("apprt/gtk/class/application.zig");
+const Application = gtk_application.Application;
 const Surface = @import("apprt/gtk/class/surface.zig").Surface;
 const configpkg = @import("config.zig");
 
@@ -73,6 +74,7 @@ pub export fn ghostty_gtk_context_free(context_: ?*Context) void {
     const context = context_ orelse return;
     const alloc = std.heap.c_allocator;
 
+    Application.setEmbeddedWakeupCallback(null, null);
     context.gtk_app.terminate();
     Application.setEmbeddedDefault(null);
     context.gtk_app.app.unref();
@@ -99,6 +101,16 @@ pub export fn ghostty_gtk_context_register(context_: ?*Context) c_int {
     return 1;
 }
 
+pub export fn ghostty_gtk_context_set_wakeup_callback(
+    context_: ?*Context,
+    callback: ?gtk_application.EmbeddedWakeupCallback,
+    userdata: ?*anyopaque,
+) c_int {
+    _ = context_ orelse return 0;
+    Application.setEmbeddedWakeupCallback(callback, userdata);
+    return 1;
+}
+
 pub export fn ghostty_gtk_context_tick(context_: ?*Context) c_int {
     const context = context_ orelse return 0;
     context.core_app.tick(&context.gtk_app) catch |err| {
@@ -120,6 +132,7 @@ fn surfaceNew(
         .command = command,
         .working_directory = working_directory,
         .scrollback_limit = scrollback_limit,
+        .cursor_style_blink = false,
     });
     return surface.refSink().as(gtk.Widget);
 }
