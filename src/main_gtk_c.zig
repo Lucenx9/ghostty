@@ -132,6 +132,7 @@ fn surfaceNew(
         .command = command,
         .working_directory = working_directory,
         .scrollback_limit = scrollback_limit,
+        .wait_after_command = true,
         .cursor_style_blink = false,
     });
     return surface.refSink().as(gtk.Widget);
