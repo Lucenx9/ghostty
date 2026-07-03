@@ -1058,7 +1058,12 @@ fn resizeCols(
             }
 
             var row_it = p.rowIterator(.left_up, active_pin);
-            while (row_it.next()) |next| {
+            // FORKTTY PATCH: cursor-pin walking can cycle past the page list
+            // and overflow `wrapped` during GTK maximize. It can never need
+            // to inspect more than total_rows.
+            var row_limit = self.total_rows;
+            while (row_limit > 0) : (row_limit -= 1) {
+                const next = row_it.next() orelse break;
                 const row = next.rowAndCell().row;
                 if (row.wrap_continuation) wrapped += 1;
             }
@@ -1194,7 +1199,12 @@ fn resizeCols(
             var wrapped: usize = 0;
 
             var row_it = c.tracked_pin.rowIterator(.left_up, active_pin);
-            while (row_it.next()) |next| {
+            // FORKTTY PATCH: after column reflow, cursor-pin walking can
+            // cycle past the page list and overflow `wrapped` during GTK
+            // maximize. It can never need to inspect more than total_rows.
+            var row_limit = self.total_rows;
+            while (row_limit > 0) : (row_limit -= 1) {
+                const next = row_it.next() orelse break;
                 const row = next.rowAndCell().row;
                 if (row.wrap_continuation) wrapped += 1;
             }

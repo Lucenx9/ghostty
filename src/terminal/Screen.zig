@@ -1770,7 +1770,11 @@ pub inline fn resize(
         .cursor = .{
             .x = self.cursor.x,
             .y = self.cursor.y,
-            .pin = self.cursor.page_pin,
+            // FORKTTY PATCH: use a temporary tracked pin for resize
+            // preservation. The live cursor pin is already tracked and is
+            // reloaded below; also using it as the preservation pin can leave
+            // the wrap counter walking stale rows during large GTK resizes.
+            .pin = null,
         },
     });
 
