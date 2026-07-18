@@ -3206,68 +3206,66 @@ pub fn dumpStringAlloc(
 /// Like `dumpStringAlloc`, but allocates at most `max_bytes + 1` bytes of
 /// dumped text. The extra byte lets callers detect truncation without asking
 /// Ghostty to materialize an unbounded scrollback string.
+pub const BoundedString = struct {
+    text: []const u8,
+    total_lines: usize,
+};
+
 pub fn dumpStringAllocBounded(
     self: *const Screen,
     alloc: Allocator,
     tl: point.Point,
     max_bytes: usize,
     from_end: bool,
-) ![]const u8 {
+) !BoundedString {
     const cap = if (max_bytes == std.math.maxInt(usize)) max_bytes else max_bytes + 1;
-    if (from_end) return self.dumpStringAllocTailBounded(alloc, tl, cap);
-    return self.dumpStringAllocHeadBounded(alloc, tl, cap);
-}
-
-fn dumpStringAllocHeadBounded(
-    self: *const Screen,
-    alloc: Allocator,
-    tl: point.Point,
-    cap: usize,
-) ![]const u8 {
     const scratch = try alloc.alloc(u8, cap);
     defer alloc.free(scratch);
 
-    var writer: std.Io.Writer = .fixed(scratch);
-    self.dumpString(&writer, .{
-        .tl = self.pages.getTopLeft(tl),
-        .br = self.pages.getBottomRight(tl) orelse return error.UnknownPoint,
-        .unwrap = false,
-    }) catch |err| switch (err) {
-        error.WriteFailed => {},
-    };
-
-    return try alloc.dupe(u8, writer.buffered());
-}
-
-fn dumpStringAllocTailBounded(
-    self: *const Screen,
-    alloc: Allocator,
-    tl: point.Point,
-    cap: usize,
-) ![]const u8 {
-    const ring = try alloc.alloc(u8, cap);
-    defer alloc.free(ring);
-
-    var tail_writer: TailBoundedWriter = .init(ring);
-    try self.dumpString(&tail_writer.writer, .{
+    var bounded_writer: BoundedWriter = .init(scratch, from_end);
+    try self.dumpString(&bounded_writer.writer, .{
         .tl = self.pages.getTopLeft(tl),
         .br = self.pages.getBottomRight(tl) orelse return error.UnknownPoint,
         .unwrap = false,
     });
-    return try tail_writer.toOwnedSlice(alloc);
+
+    return .{
+        .text = try bounded_writer.toOwnedSlice(alloc),
+        .total_lines = bounded_writer.stats.totalLines(),
+    };
 }
 
-const TailBoundedWriter = struct {
-    ring: []u8,
-    total: usize = 0,
+const DumpStats = struct {
+    total_bytes: usize = 0,
+    newlines: usize = 0,
+    last_byte: ?u8 = null,
+
+    fn remember(self: *DumpStats, bytes: []const u8) void {
+        self.total_bytes += bytes.len;
+        self.newlines += std.mem.count(u8, bytes, "\n");
+        if (bytes.len > 0) self.last_byte = bytes[bytes.len - 1];
+    }
+
+    fn totalLines(self: *const DumpStats) usize {
+        if (self.total_bytes == 0) return 0;
+        return self.newlines + @intFromBool(self.last_byte != '\n');
+    }
+};
+
+const BoundedWriter = struct {
+    buffer: []u8,
+    kept_len: usize = 0,
+    from_end: bool,
+    stats: DumpStats = .{},
     writer: std.Io.Writer,
 
-    fn init(ring: []u8) TailBoundedWriter {
+    fn init(buffer: []u8, from_end: bool) BoundedWriter {
         return .{
-            .ring = ring,
+            .buffer = buffer,
+            .from_end = from_end,
             .writer = .{
                 .vtable = &.{
-                    .drain = TailBoundedWriter.drain,
+                    .drain = BoundedWriter.drain,
                 },
                 .buffer = &.{},
             },
@@ -3279,7 +3277,7 @@ const TailBoundedWriter = struct {
         data: []const []const u8,
         splat: usize,
     ) std.Io.Writer.Error!usize {
-        const self: *TailBoundedWriter = @alignCast(@fieldParentPtr("writer", w));
+        const self: *BoundedWriter = @alignCast(@fieldParentPtr("writer", w));
         const slices = data[0 .. data.len - 1];
         const pattern = data[slices.len];
         var written: usize = 0;
@@ -3294,25 +3292,33 @@ const TailBoundedWriter = struct {
         return written;
     }
 
-    fn remember(self: *TailBoundedWriter, bytes: []const u8) void {
-        for (bytes) |byte| {
-            self.ring[self.total % self.ring.len] = byte;
-            self.total += 1;
+    fn remember(self: *BoundedWriter, bytes: []const u8) void {
+        if (self.from_end) {
+            for (bytes, 0..) |byte, offset| {
+                self.buffer[(self.stats.total_bytes + offset) % self.buffer.len] = byte;
+            }
+        } else {
+            const copy_len = @min(bytes.len, self.buffer.len - self.kept_len);
+            @memcpy(self.buffer[self.kept_len..][0..copy_len], bytes[0..copy_len]);
+            self.kept_len += copy_len;
         }
+        self.stats.remember(bytes);
     }
 
-    fn toOwnedSlice(self: *const TailBoundedWriter, alloc: Allocator) ![]const u8 {
-        const kept_len = @min(self.total, self.ring.len);
+    fn toOwnedSlice(self: *const BoundedWriter, alloc: Allocator) ![]const u8 {
+        if (!self.from_end) return try alloc.dupe(u8, self.buffer[0..self.kept_len]);
+
+        const kept_len = @min(self.stats.total_bytes, self.buffer.len);
         const out = try alloc.alloc(u8, kept_len);
-        if (self.total <= self.ring.len) {
-            @memcpy(out, self.ring[0..kept_len]);
+        if (self.stats.total_bytes <= self.buffer.len) {
+            @memcpy(out, self.buffer[0..kept_len]);
             return out;
         }
 
-        const start = self.total % self.ring.len;
-        const first_len = self.ring.len - start;
-        @memcpy(out[0..first_len], self.ring[start..]);
-        @memcpy(out[first_len..], self.ring[0..start]);
+        const start = self.stats.total_bytes % self.buffer.len;
+        const first_len = self.buffer.len - start;
+        @memcpy(out[0..first_len], self.buffer[start..]);
+        @memcpy(out[first_len..], self.buffer[0..start]);
         return out;
     }
 };
@@ -3536,9 +3542,10 @@ test "Screen bounded dump keeps one byte past head limit" {
     defer s.deinit();
 
     try s.testWriteString("hello\nworld\ntest");
-    const str = try s.dumpStringAllocBounded(alloc, .{ .screen = .{} }, 6, false);
-    defer alloc.free(str);
-    try testing.expectEqualStrings("hello\nw", str);
+    const result = try s.dumpStringAllocBounded(alloc, .{ .screen = .{} }, 6, false);
+    defer alloc.free(result.text);
+    try testing.expectEqualStrings("hello\nw", result.text);
+    try testing.expectEqual(@as(usize, 3), result.total_lines);
 }
 
 test "Screen bounded dump can keep tail bytes" {
@@ -3549,9 +3556,10 @@ test "Screen bounded dump can keep tail bytes" {
     defer s.deinit();
 
     try s.testWriteString("hello\nworld\ntest");
-    const str = try s.dumpStringAllocBounded(alloc, .{ .screen = .{} }, 6, true);
-    defer alloc.free(str);
-    try testing.expectEqualStrings("ld\ntest", str);
+    const result = try s.dumpStringAllocBounded(alloc, .{ .screen = .{} }, 6, true);
+    defer alloc.free(result.text);
+    try testing.expectEqualStrings("ld\ntest", result.text);
+    try testing.expectEqual(@as(usize, 3), result.total_lines);
 }
 
 test "Screen read and write no scrollback small" {

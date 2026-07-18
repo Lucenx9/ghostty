@@ -1955,11 +1955,17 @@ pub const PlainText = struct {
     text: []const u8,
     cols: u32,
     rows: u32,
+    total_lines: usize,
 
     pub fn deinit(self: *PlainText, alloc: Allocator) void {
         alloc.free(self.text);
     }
 };
+
+fn plainTextLineCount(text: []const u8) usize {
+    if (text.len == 0) return 0;
+    return std.mem.count(u8, text, "\n") + @intFromBool(text[text.len - 1] != '\n');
+}
 
 pub fn dumpPlainText(
     self: *Surface,
@@ -1982,6 +1988,7 @@ pub fn dumpPlainText(
         .text = text,
         .cols = @intCast(grid.columns),
         .rows = @intCast(grid.rows),
+        .total_lines = plainTextLineCount(text),
     };
 }
 
@@ -2000,19 +2007,20 @@ pub fn dumpPlainTextLimited(
         .all => .{ .screen = .{} },
         _ => return error.InvalidPlainTextScope,
     };
-    const text = try self.io.terminal.screens.active.dumpStringAllocBounded(
+    const bounded = try self.io.terminal.screens.active.dumpStringAllocBounded(
         alloc,
         point,
         max_bytes,
         from_end,
     );
-    errdefer alloc.free(text);
+    errdefer alloc.free(bounded.text);
 
     const grid = self.size.grid();
     return .{
-        .text = text,
+        .text = bounded.text,
         .cols = @intCast(grid.columns),
         .rows = @intCast(grid.rows),
+        .total_lines = bounded.total_lines,
     };
 }
 

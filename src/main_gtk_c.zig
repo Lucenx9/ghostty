@@ -283,8 +283,46 @@ pub export fn ghostty_gtk_surface_read_text_limited(
     truncate_from_end: c_int,
     out_: ?*GhosttyGtkText,
 ) c_int {
+    return surfaceReadTextLimited(
+        surface_,
+        scope_raw,
+        max_bytes,
+        truncate_from_end,
+        out_,
+        null,
+    );
+}
+
+pub export fn ghostty_gtk_surface_read_text_limited_with_total_lines(
+    surface_: ?*gtk.Widget,
+    scope_raw: c_int,
+    max_bytes: usize,
+    truncate_from_end: c_int,
+    out_: ?*GhosttyGtkText,
+    out_total_lines_: ?*usize,
+) c_int {
+    const out_total_lines = out_total_lines_ orelse return 0;
+    return surfaceReadTextLimited(
+        surface_,
+        scope_raw,
+        max_bytes,
+        truncate_from_end,
+        out_,
+        out_total_lines,
+    );
+}
+
+fn surfaceReadTextLimited(
+    surface_: ?*gtk.Widget,
+    scope_raw: c_int,
+    max_bytes: usize,
+    truncate_from_end: c_int,
+    out_: ?*GhosttyGtkText,
+    out_total_lines: ?*usize,
+) c_int {
     const out = out_ orelse return 0;
     clearText(out);
+    if (out_total_lines) |total_lines| total_lines.* = 0;
 
     const surface_widget = surface_ orelse return 0;
     const surface = gobject.ext.cast(Surface, surface_widget) orelse return 0;
@@ -305,6 +343,7 @@ pub export fn ghostty_gtk_surface_read_text_limited(
         .cols = text.cols,
         .rows = text.rows,
     };
+    if (out_total_lines) |total_lines| total_lines.* = text.total_lines;
     return 1;
 }
 

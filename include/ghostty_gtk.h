@@ -70,6 +70,16 @@ int ghostty_gtk_surface_read_text_limited(
     int truncate_from_end,
     ghostty_gtk_text_t *out
 );
+// Bounded read variant that also reports the line count of the complete
+// selected source before byte truncation.
+int ghostty_gtk_surface_read_text_limited_with_total_lines(
+    GtkWidget *surface,
+    ghostty_gtk_text_scope_t scope,
+    size_t max_bytes,
+    int truncate_from_end,
+    ghostty_gtk_text_t *out,
+    size_t *out_total_lines
+);
 void ghostty_gtk_text_free(ghostty_gtk_text_t *text);
 
 // Writes the child process exit code to *out_code and returns 1 if the
